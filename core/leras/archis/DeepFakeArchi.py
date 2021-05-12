@@ -21,16 +21,16 @@ class DeepFakeArchi(nn.ArchiBase):
                 xUnit: Learning a Spatial Activation Function for Efficient Image Restoration
                 https://arxiv.org/pdf/1711.06445.pdf
                 """
-                def on_build(self, ch, kernel_size=3 ):
+                def on_build(self, ch, kernel_size=7 ):
                     self.frn1 = nn.FRNorm2D(ch)
                     self.tlu1 = nn.TLU(ch)
-                    self.conv2 = nn.Conv2D( ch, ch, kernel_size=kernel_size, padding='SAME')
+                    self.depthwise_conv2 = nn.DepthwiseConv2D( ch, kernel_size=kernel_size, padding='SAME')
                     self.frn2 = nn.FRNorm2D(ch)
 
                 def forward(self, inp):
                     x = self.frn1(inp)
                     x = self.tlu1(x)
-                    x = self.conv2(x)
+                    x = self.depthwise_conv2(x)
                     x = self.frn2(x)
                     x = tf.nn.sigmoid(x)
                     
