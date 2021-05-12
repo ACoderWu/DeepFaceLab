@@ -103,7 +103,7 @@ Examples: df, liae, df-d, df-ud, liae-ud, ...
                 if archi_opts is not None:
                     if len(archi_opts) == 0:
                         continue
-                    if len([ 1 for opt in archi_opts if opt not in ['u','d'] ]) != 0:
+                    if len([ 1 for opt in archi_opts if opt not in ['u','d','s'] ]) != 0:
                         continue
 
                     if 'd' in archi_opts:

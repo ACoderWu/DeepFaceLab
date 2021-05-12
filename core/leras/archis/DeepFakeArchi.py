@@ -15,6 +15,27 @@ class DeepFakeArchi(nn.ArchiBase):
             opts = ''
 
         if mod is None:
+            class xUnit(nn.ModelBase):
+                """
+                based on
+                xUnit: Learning a Spatial Activation Function for Efficient Image Restoration
+                https://arxiv.org/pdf/1711.06445.pdf
+                """
+                def on_build(self, ch, kernel_size=3 ):
+                    self.frn1 = nn.FRNorm2D(ch)
+                    self.tlu1 = nn.TLU(ch)
+                    self.conv2 = nn.Conv2D( ch, ch, kernel_size=kernel_size, padding='SAME')
+                    self.frn2 = nn.FRNorm2D(ch)
+
+                def forward(self, inp):
+                    x = self.frn1(inp)
+                    x = self.tlu1(x)
+                    x = self.conv2(x)
+                    x = self.frn2(x)
+                    x = tf.nn.sigmoid(x)
+                    
+                    return inp * x
+
             class Downscale(nn.ModelBase):
                 def __init__(self, in_ch, out_ch, kernel_size=5, *kwargs ):
                     self.in_ch = in_ch
@@ -24,10 +45,15 @@ class DeepFakeArchi(nn.ArchiBase):
 
                 def on_build(self, *args, **kwargs ):
                     self.conv1 = nn.Conv2D( self.in_ch, self.out_ch, kernel_size=self.kernel_size, strides=2, padding='SAME')
-
+                    if 's' in opts:
+                        self.act1 = xUnit(self.out_ch)
+                        
                 def forward(self, x):
                     x = self.conv1(x)
-                    x = tf.nn.leaky_relu(x, 0.1)
+                    if 's' in opts:
+                        x = self.act1(x)
+                    else:
+                        x = tf.nn.leaky_relu(x, 0.1)
                     return x
 
                 def get_out_ch(self):
@@ -52,10 +78,16 @@ class DeepFakeArchi(nn.ArchiBase):
             class Upscale(nn.ModelBase):
                 def on_build(self, in_ch, out_ch, kernel_size=3 ):
                     self.conv1 = nn.Conv2D( in_ch, out_ch*4, kernel_size=kernel_size, padding='SAME')
+                    if 's' in opts:
+                        self.act = xUnit(out_ch*4)
+
 
                 def forward(self, x):
                     x = self.conv1(x)
-                    x = tf.nn.leaky_relu(x, 0.1)
+                    if 's' in opts:
+                        x = self.act(x)
+                    else:
+                        x = tf.nn.leaky_relu(x, 0.1)
                     x = nn.depth_to_space(x, 2)
                     return x
 
@@ -63,12 +95,23 @@ class DeepFakeArchi(nn.ArchiBase):
                 def on_build(self, ch, kernel_size=3 ):
                     self.conv1 = nn.Conv2D( ch, ch, kernel_size=kernel_size, padding='SAME')
                     self.conv2 = nn.Conv2D( ch, ch, kernel_size=kernel_size, padding='SAME')
-
+                    if 's' in opts:
+                        self.act1 = xUnit(ch)
+                        self.act2 = xUnit(ch)
+                        
                 def forward(self, inp):
                     x = self.conv1(inp)
-                    x = tf.nn.leaky_relu(x, 0.2)
+                    if 's' in opts:
+                        x = self.act1(x)
+                    else:
+                        x = tf.nn.leaky_relu(x, 0.2)
+
                     x = self.conv2(x)
-                    x = tf.nn.leaky_relu(inp + x, 0.2)
+                    x = inp + x
+                    if 's' in opts:
+                        x = self.act2(x)
+                    else:
+                        x = tf.nn.leaky_relu(x, 0.2)
                     return x
 
             class Encoder(nn.ModelBase):
@@ -76,16 +119,16 @@ class DeepFakeArchi(nn.ArchiBase):
                     self.in_ch = in_ch
                     self.e_ch = e_ch
                     super().__init__(**kwargs)
-                    
-                def on_build(self):                    
+
+                def on_build(self):
                     self.down1 = DownscaleBlock(self.in_ch, self.e_ch, n_downscales=4, kernel_size=5)
 
                 def forward(self, inp):
                     return nn.flatten(self.down1(inp))
-                    
+
                 def get_out_res(self, res):
                     return res // (2**4)
-                    
+
                 def get_out_ch(self):
                     return self.e_ch * 8
 
@@ -203,7 +246,7 @@ class DeepFakeArchi(nn.ArchiBase):
                     m = tf.nn.sigmoid(self.out_convm(m))
 
                     return x, m
-        
+
         self.Encoder = Encoder
         self.Inter = Inter
         self.Decoder = Decoder
